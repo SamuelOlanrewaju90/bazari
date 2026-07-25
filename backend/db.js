@@ -32,8 +32,11 @@ async function initSchema() {
       category TEXT NOT NULL,
       price_cents INTEGER NOT NULL,
       rating REAL NOT NULL DEFAULT 0,
-      stock INTEGER NOT NULL DEFAULT 0
+      stock INTEGER NOT NULL DEFAULT 0,
+      image_url TEXT
     );
+
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
 
     CREATE TABLE IF NOT EXISTS cart_items (
       id SERIAL PRIMARY KEY,

@@ -7,7 +7,7 @@ router.use(requireAuth);
 
 async function getCartWithProducts(userId) {
   return query(
-    `SELECT c.product_id AS "productId", c.qty, p.name, p.price_cents AS "priceCents", p.category, p.stock
+    `SELECT c.product_id AS "productId", c.qty, p.name, p.price_cents AS "priceCents", p.category, p.stock, p.image_url AS "imageUrl"
      FROM cart_items c
      JOIN products p ON p.id = c.product_id
      WHERE c.user_id = $1`,
