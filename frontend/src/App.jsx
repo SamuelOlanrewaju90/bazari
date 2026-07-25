@@ -43,7 +43,7 @@ async function apiFetch(path, { method = "GET", body, token } = {}) {
 }
 
 function normalizeProduct(p) {
-  return { id: p.id, name: p.name, cat: p.category, price: p.price_cents, rating: p.rating, stock: p.stock };
+  return { id: p.id, name: p.name, cat: p.category, price: p.price_cents, rating: p.rating, stock: p.stock, image: p.image_url };
 }
 
 function TicketCard({ children, accent, className = "", style = {} }) {
@@ -96,7 +96,7 @@ export default function App() {
           const cartRes = await apiFetch("/api/cart", { token: savedToken });
           setToken(savedToken);
           setUser(parsedUser);
-          setCart(cartRes.items.map((i) => ({ productId: i.productId, qty: i.qty, product: { id: i.productId, name: i.name, price: i.priceCents, cat: i.category, stock: i.stock } })));
+          setCart(cartRes.items.map((i) => ({ productId: i.productId, qty: i.qty, product: { id: i.productId, name: i.name, price: i.priceCents, cat: i.category, stock: i.stock, image: i.imageUrl } })));
           setShipForm((f) => ({ ...f, name: parsedUser.name }));
         } catch (e) {
           localStorage.removeItem("bazari_token");
@@ -132,7 +132,7 @@ export default function App() {
       try { await apiFetch("/api/cart", { method: "POST", token: tok, body: { productId: item.productId, qty: item.qty } }); } catch (e) {}
     }
     const res = await apiFetch("/api/cart", { token: tok });
-    setCart(res.items.map((i) => ({ productId: i.productId, qty: i.qty, product: { id: i.productId, name: i.name, price: i.priceCents, cat: i.category, stock: i.stock } })));
+    setCart(res.items.map((i) => ({ productId: i.productId, qty: i.qty, product: { id: i.productId, name: i.name, price: i.priceCents, cat: i.category, stock: i.stock, image: i.imageUrl } })));
   };
 
   const handleAuth = async (mode) => {
@@ -172,7 +172,7 @@ export default function App() {
     if (token) {
       try {
         const res = await apiFetch("/api/cart", { method: "POST", token, body: { productId: product.id, qty } });
-        setCart(res.items.map((i) => ({ productId: i.productId, qty: i.qty, product: { id: i.productId, name: i.name, price: i.priceCents, cat: i.category, stock: i.stock } })));
+        setCart(res.items.map((i) => ({ productId: i.productId, qty: i.qty, product: { id: i.productId, name: i.name, price: i.priceCents, cat: i.category, stock: i.stock, image: i.imageUrl } })));
       } catch (e) { setApiError(e.message); }
     } else {
       setCart((prev) => {
@@ -187,7 +187,7 @@ export default function App() {
     if (token) {
       try {
         const res = await apiFetch(`/api/cart/${productId}`, { method: "PATCH", token, body: { qty } });
-        setCart(res.items.map((i) => ({ productId: i.productId, qty: i.qty, product: { id: i.productId, name: i.name, price: i.priceCents, cat: i.category, stock: i.stock } })));
+        setCart(res.items.map((i) => ({ productId: i.productId, qty: i.qty, product: { id: i.productId, name: i.name, price: i.priceCents, cat: i.category, stock: i.stock, image: i.imageUrl } })));
       } catch (e) { setApiError(e.message); }
     } else {
       setCart((prev) => (qty <= 0 ? prev.filter((c) => c.productId !== productId) : prev.map((c) => (c.productId === productId ? { ...c, qty } : c))));
@@ -312,7 +312,9 @@ export default function App() {
                 return (
                   <TicketCard key={p.id} accent={cat?.color} className="p-3 flex flex-col cursor-pointer">
                     <div onClick={() => setView({ name: "product", id: p.id })}>
-                      <div className="text-4xl mb-2 h-16 flex items-center justify-center rounded-lg" style={{ background: PALETTE.fog }}>{cat?.icon}</div>
+                      <div className="mb-2 h-16 flex items-center justify-center rounded-lg overflow-hidden" style={{ background: PALETTE.fog }}>
+                        {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : <span className="text-4xl">{cat?.icon}</span>}
+                      </div>
                       <div className="text-xs font-semibold mb-1" style={{ color: PALETTE.navy }}>{p.name}</div>
                       <StarRating value={p.rating} />
                       <div className="mono text-sm font-semibold mt-1" style={{ color: PALETTE.navy }}>{formatPrice(p.price)}</div>
@@ -335,7 +337,9 @@ export default function App() {
             <div>
               <button onClick={() => setView({ name: "home" })} className="flex items-center gap-1 text-sm mb-4" style={{ color: PALETTE.slate }}><ChevronLeft size={16} /> Back</button>
               <div className="grid md:grid-cols-2 gap-8">
-                <div className="text-9xl h-64 flex items-center justify-center rounded-xl" style={{ background: PALETTE.white }}>{cat?.icon}</div>
+                <div className="h-64 flex items-center justify-center rounded-xl overflow-hidden" style={{ background: PALETTE.white }}>
+                  {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : <span className="text-9xl">{cat?.icon}</span>}
+                </div>
                 <div>
                   <span className="text-xs font-semibold px-2 py-1 rounded-full" style={{ background: cat?.color, color: PALETTE.white }}>{cat?.name}</span>
                   <h1 className="display text-2xl font-semibold mt-3" style={{ color: PALETTE.navy }}>{p.name}</h1>
@@ -368,8 +372,8 @@ export default function App() {
 
         {view.name === "orders" && user && (
           <div>
-            <div className="flex items-center justify-between mb-5">
-              <div>
+            <div className="flex items-center justify-between mb-5
+            <div>
                 <h2 className="display text-xl font-semibold" style={{ color: PALETTE.navy }}>My Orders</h2>
                 <p className="text-sm" style={{ color: PALETTE.slate }}>{user.name} · {user.email}</p>
               </div>
@@ -451,8 +455,8 @@ export default function App() {
               {cart.length === 0 && <div className="text-sm text-center py-10" style={{ color: PALETTE.slate }}>Your cart is empty.</div>}
               {cart.map((c) => (
                 <div key={c.productId} className="flex gap-3 items-center">
-                  <div className="text-2xl w-12 h-12 flex items-center justify-center rounded-lg shrink-0" style={{ background: PALETTE.fog }}>
-                    {CATEGORIES.find((cat) => cat.id === c.product.cat)?.icon}
+                  <div className="w-12 h-12 flex items-center justify-center rounded-lg shrink-0 overflow-hidden" style={{ background: PALETTE.fog }}>
+                    {c.product.image ? <img src={c.product.image} alt={c.product.name} className="w-full h-full object-cover" /> : <span className="text-2xl">{CATEGORIES.find((cat) => cat.id === c.product.cat)?.icon}</span>}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold truncate" style={{ color: PALETTE.navy }}>{c.product.name}</div>
@@ -472,9 +476,8 @@ export default function App() {
                 <button onClick={() => { setCartOpen(false); setView({ name: user ? "checkout" : "login" }); }} className="w-full py-2.5 rounded-lg text-sm font-semibold" style={{ background: PALETTE.marigold, color: PALETTE.navy }}>Checkout</button>
               </div>
             )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+           </div>
+          )}
+         </div>
+         );
+  -5
