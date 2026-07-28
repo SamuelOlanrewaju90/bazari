@@ -372,8 +372,8 @@ export default function App() {
 
         {view.name === "orders" && user && (
           <div>
-            <div className="flex items-center justify-between mb-5
-            <div>
+            <div className="flex items-center justify-between mb-5">
+              <div>
                 <h2 className="display text-xl font-semibold" style={{ color: PALETTE.navy }}>My Orders</h2>
                 <p className="text-sm" style={{ color: PALETTE.slate }}>{user.name} · {user.email}</p>
               </div>
