@@ -1,4 +1,244 @@
-ollbar-thumb{background:#c9ced4;border-radius:3px}`}</style>
+import React, { useState, useEffect, useMemo } from "react";
+import { Search, ShoppingCart, User, X, Plus, Minus, Check, ChevronLeft, Package, LogOut, Star } from "lucide-react";
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000";
+
+const PALETTE = {
+  navy: "#16213D",
+  fog: "#EEF1F2",
+  marigold: "#F5A524",
+  brick: "#C1502E",
+  green: "#2E7D5B",
+  teal: "#1B7A8C",
+  slate: "#5B6472",
+  white: "#FFFFFF",
+};
+
+const CATEGORIES = [
+  { id: "electronics", name: "Electronics", color: PALETTE.teal, icon: "📱" },
+  { id: "fashion", name: "Fashion", color: PALETTE.brick, icon: "👗" },
+  { id: "home", name: "Home & Living", color: PALETTE.marigold, icon: "🏠" },
+  { id: "beauty", name: "Beauty", color: PALETTE.green, icon: "💄" },
+  { id: "groceries", name: "Groceries", color: PALETTE.slate, icon: "🛒" },
+  { id: "sports", name: "Sports", color: PALETTE.navy, icon: "⚽" },
+];
+
+function formatPrice(n) {
+  return "₦" + Number(n).toLocaleString("en-NG");
+}
+
+async function apiFetch(path, { method = "GET", body, token } = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Something went wrong.");
+  return data;
+}
+
+function normalizeProduct(p) {
+  return { id: p.id, name: p.name, cat: p.category, price: p.price_cents, rating: p.rating, stock: p.stock, image: p.image_url };
+}
+
+function TicketCard({ children, accent, className = "", style = {} }) {
+  return (
+    <div className={`relative rounded-lg ${className}`} style={{ background: PALETTE.white, boxShadow: "0 2px 8px rgba(22,33,61,0.08)", ...style }}>
+      <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full" style={{ background: PALETTE.fog }} />
+      <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full" style={{ background: PALETTE.fog }} />
+      {accent && <div className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-lg" style={{ background: accent }} />}
+      {children}
+    </div>
+  );
+}
+
+function StarRating({ value }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      <Star size={13} fill={PALETTE.marigold} color={PALETTE.marigold} />
+      <span className="text-xs" style={{ color: PALETTE.slate }}>{value}</span>
+    </div>
+  );
+}
+
+export default function App() {
+  const [view, setView] = useState({ name: "home" });
+  const [search, setSearch] = useState("");
+  const [activeCat, setActiveCat] = useState("all");
+  const [products, setProducts] = useState([]);
+  const [cart, setCart] = useState([]);
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState("");
+  const [authForm, setAuthForm] = useState({ name: "", email: "", password: "" });
+  const [authError, setAuthError] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [shipForm, setShipForm] = useState({ name: "", address: "", city: "", phone: "" });
+  const [lastOrder, setLastOrder] = useState(null);
+  const [placingOrder, setPlacingOrder] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const savedToken = localStorage.getItem("bazari_token");
+      const savedUser = localStorage.getItem("bazari_user");
+      if (savedToken && savedUser) {
+        try {
+          const parsedUser = JSON.parse(savedUser);
+          const cartRes = await apiFetch("/api/cart", { token: savedToken });
+          setToken(savedToken);
+          setUser(parsedUser);
+          setCart(cartRes.items.map((i) => ({ productId: i.productId, qty: i.qty, product: { id: i.productId, name: i.name, price: i.priceCents, cat: i.category, stock: i.stock, image: i.imageUrl } })));
+          setShipForm((f) => ({ ...f, name: parsedUser.name }));
+        } catch (e) {
+          localStorage.removeItem("bazari_token");
+          localStorage.removeItem("bazari_user");
+        }
+      }
+      setLoading(false);
+    })();
+  }, []);
+
+  useEffect(() => {
+    const handle = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams();
+        if (activeCat !== "all") params.set("category", activeCat);
+        if (search.trim()) params.set("search", search.trim());
+        const res = await apiFetch(`/api/products?${params.toString()}`);
+        setProducts(res.products.map(normalizeProduct));
+        setApiError("");
+      } catch (e) {
+        setApiError(`Couldn't reach the backend at ${API_BASE}. Is it running?`);
+      }
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [activeCat, search]);
+
+  const cartTotal = useMemo(() => cart.reduce((sum, c) => sum + (c.product?.price || 0) * c.qty, 0), [cart]);
+  const cartCount = useMemo(() => cart.reduce((sum, c) => sum + c.qty, 0), [cart]);
+
+  const syncGuestCartToServer = async (tok) => {
+    for (const item of cart) {
+      try { await apiFetch("/api/cart", { method: "POST", token: tok, body: { productId: item.productId, qty: item.qty } }); } catch (e) {}
+    }
+    const res = await apiFetch("/api/cart", { token: tok });
+    setCart(res.items.map((i) => ({ productId: i.productId, qty: i.qty, product: { id: i.productId, name: i.name, price: i.priceCents, cat: i.category, stock: i.stock, image: i.imageUrl } })));
+  };
+
+  const handleAuth = async (mode) => {
+    setAuthError("");
+    setAuthBusy(true);
+    try {
+      const path = mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
+      const body = mode === "signup"
+        ? { name: authForm.name.trim(), email: authForm.email.trim(), password: authForm.password }
+        : { email: authForm.email.trim(), password: authForm.password };
+      const res = await apiFetch(path, { method: "POST", body });
+      localStorage.setItem("bazari_token", res.token);
+      localStorage.setItem("bazari_user", JSON.stringify(res.user));
+      setToken(res.token);
+      setUser(res.user);
+      setShipForm((f) => ({ ...f, name: res.user.name }));
+      await syncGuestCartToServer(res.token);
+      setView({ name: "home" });
+    } catch (e) {
+      setAuthError(e.message);
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem("bazari_token");
+    localStorage.removeItem("bazari_user");
+    setToken(null);
+    setUser(null);
+    setCart([]);
+    setOrders([]);
+    setView({ name: "home" });
+  };
+
+  const addToCart = async (product, qty = 1) => {
+    if (token) {
+      try {
+        const res = await apiFetch("/api/cart", { method: "POST", token, body: { productId: product.id, qty } });
+        setCart(res.items.map((i) => ({ productId: i.productId, qty: i.qty, product: { id: i.productId, name: i.name, price: i.priceCents, cat: i.category, stock: i.stock, image: i.imageUrl } })));
+      } catch (e) { setApiError(e.message); }
+    } else {
+      setCart((prev) => {
+        const existing = prev.find((c) => c.productId === product.id);
+        if (existing) return prev.map((c) => (c.productId === product.id ? { ...c, qty: c.qty + qty } : c));
+        return [...prev, { productId: product.id, qty, product }];
+      });
+    }
+  };
+
+  const updateQty = async (productId, qty) => {
+    if (token) {
+      try {
+        const res = await apiFetch(`/api/cart/${productId}`, { method: "PATCH", token, body: { qty } });
+        setCart(res.items.map((i) => ({ productId: i.productId, qty: i.qty, product: { id: i.productId, name: i.name, price: i.priceCents, cat: i.category, stock: i.stock, image: i.imageUrl } })));
+      } catch (e) { setApiError(e.message); }
+    } else {
+      setCart((prev) => (qty <= 0 ? prev.filter((c) => c.productId !== productId) : prev.map((c) => (c.productId === productId ? { ...c, qty } : c))));
+    }
+  };
+
+  const placeOrder = async () => {
+    if (!token) { setView({ name: "login" }); return; }
+    if (!shipForm.address.trim() || !shipForm.city.trim() || !shipForm.phone.trim()) return;
+    setPlacingOrder(true);
+    try {
+      const res = await apiFetch("/api/orders", { method: "POST", token, body: { shipping: shipForm } });
+      const order = res.order;
+      setLastOrder({
+        id: order.id,
+        total: order.totalCents,
+        items: order.items.map((it) => ({ name: it.name, qty: it.qty, price: it.priceCents })),
+      });
+      setCart([]);
+      setView({ name: "confirmation" });
+    } catch (e) {
+      setApiError(e.message);
+    } finally {
+      setPlacingOrder(false);
+    }
+  };
+
+  const loadOrders = async () => {
+    if (!token) return;
+    try {
+      const res = await apiFetch("/api/orders", { token });
+      setOrders(res.orders.map((o) => ({
+        id: o.id,
+        date: o.createdAt,
+        status: o.status,
+        total: o.totalCents,
+        items: o.items.map((it) => ({ name: it.name, qty: it.qty, price: it.priceCents })),
+      })));
+    } catch (e) { setApiError(e.message); }
+  };
+
+  useEffect(() => { if (view.name === "orders") loadOrders(); }, [view.name, token]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: PALETTE.fog }}>
+        <div style={{ fontFamily: "Fraunces, serif", color: PALETTE.navy }} className="text-2xl italic">Bazari</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen" style={{ background: PALETTE.fog, fontFamily: "Inter, sans-serif" }}>
+      <style>{`.mono{font-family:'IBM Plex Mono',monospace}.display{font-family:'Fraunces',serif}::-webkit-scrollbar{height:6px;width:6px}::-webkit-scrollbar-thumb{background:#c9ced4;border-radius:3px}`}</style>
 
       {apiError && (
         <div className="text-xs text-center py-1.5 px-4" style={{ background: PALETTE.brick, color: PALETTE.white }}>{apiError}</div>
@@ -233,7 +473,9 @@ ollbar-thumb{background:#c9ced4;border-radius:3px}`}</style>
                 <button onClick={() => { setCartOpen(false); setView({ name: user ? "checkout" : "login" }); }} className="w-full py-2.5 rounded-lg text-sm font-semibold" style={{ background: PALETTE.marigold, color: PALETTE.navy }}>Checkout</button>
               </div>
             )}
-           </div>
-          )}
-         </div>
-         );
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
